@@ -6,8 +6,6 @@ import torch.nn.functional as nnf
 from parsivar import Tokenizer, Normalizer
 import torch.nn as nn
 import torch.optim as optim
-# import torch.models as model
-# import matplo/tlib.pyplot as plt
 from collections import defaultdict
 
 
@@ -20,13 +18,13 @@ class SkipGram(nn.Module):
         embed_focus = self.embeddings(focus).view((1, -1))
         embed_ctx = self.embeddings(context).view((1, -1))
         score = torch.mm(embed_focus, torch.t(embed_ctx))
-        log_probs = nnf.logsigmoid(score)
+        log_probs = torch.tanh(score)
 
         return log_probs
 
-corpus = open('/content/drive/MyDrive/ann.txt', encoding='utf8').read()
+corpus = open('ann.txt', encoding='utf8').read()
 
-persian_stopwords = ['و', 'در', 'به', 'از', 'كه', 'مي', 'اين','ز'
+persian_stopwords = ['و', 'در', 'به', 'از', 'كه', 'مي', 'اين', 'ز'
                       'است', 'را', 'با', 'هاي', 'براي', 'آن', 'يك', 'شود', 'شده', 'خود', 'ها', 'كرد',
                       'شد', 'اي', 'تا', 'كند', 'بر', 'بود', 'گفت', 'نيز', 'وي', 'هم', 'كنند', 'دارد',
                       'ما', 'كرده', 'يا', 'اما', 'بايد', 'دو', 'اند', 'هر', 'خواهد', 'او', 'مورد', 'آنها',
@@ -67,14 +65,6 @@ def tokenize_corpus(corpus):
 
     return tokens
 
-def tokenize_corpus_sent(corpus):
-    sentence_normalizer = Normalizer()
-    sentence_tokenizer = Tokenizer()
-    tokens = sentence_tokenizer.tokenize_sentences(sentence_normalizer.normalize(corpus))
-
-    return tokens
-
-
 tokenized_corpus = tokenize_corpus(corpus)
 vocabulary = []
 for word in tokenized_corpus:
@@ -85,27 +75,25 @@ word2idx = {w: idx for (idx, w) in enumerate(vocabulary)}  # word to index
 idx2word = {idx: w for (idx, w) in enumerate(vocabulary)}  # index to word
 
 vocabulary_size = len(vocabulary)
-embedding_dims = 10  # dimension of hidden layers
-num_epochs = 100
+embedding_dims = 5  # dimension of hidden layers
+num_epochs = 1
 learning_rate = 0.001
 
 def create_skipgram_dataset(text):
     import random
     data = []
     text = tokenize_corpus(text)
-    for i in range(3, len(text) - 3):
-        data.append((text[i], text[i - 3], 1))
+    for i in range(2, len(text) - 2):
         data.append((text[i], text[i - 2], 1))
         data.append((text[i], text[i - 1], 1))
         data.append((text[i], text[i + 1], 1))
         data.append((text[i], text[i + 2], 1))
-        data.append((text[i], text[i + 3] ,1))
         # negative sampling
-        for _ in range(6):
-            if random.random() < 0.5 or i >= len(text) - 4:
+        for _ in range(4):
+            if random.random() < 0.5 or i >= len(text) - 3:
                 rand_id = random.randint(0, i-1)
             else:
-                rand_id = random.randint(i + 4, len(text) - 1)
+                rand_id = random.randint(i+3, len(text)-1)
             data.append((text[i], text[rand_id], 0))
     return data
 
@@ -134,12 +122,10 @@ def train_skipgram():
         if(epoch % 10== 0):
           print(total_loss/len(skipgram_train))
         losses.append(total_loss)
-    
     return model, losses
 
 
 sg_model, sg_losses = train_skipgram()
-# torch.save(sg_model, 'skipgram.py')
 model = SkipGram(vocabulary_size, embedding_dims)
 FILE = 'model_weights.pth'
 torch.save(model.state_dict(), FILE)
@@ -161,27 +147,34 @@ def test_skipgram(test_data, model):
     print('Accuracy: {:.1f}% ({:d}/{:d})'.format(correct_ct/len(test_data)*100, correct_ct, len(test_data)))
 
 
-def get_most_similar(test_word, model, kalms):
+test_skipgram(skipgram_train, sg_model)
+
+
+def get_most_similar(test_word, model, vocabs):
     log_probability = []
     data_prob_list = []
-    sim_words = []
-    for kalm in kalms:
+    sim_word = []
+    for vocab_word in vocabs:
         in_w = Variable(torch.LongTensor([word2idx[test_word]]))
-        out_w = Variable(torch.LongTensor([word2idx[kalm]]))
+        out_w = Variable(torch.LongTensor([word2idx[vocab_word]]))
         log_probability.append(model(in_w, out_w).data)
-        sim_words.append(kalm)
-        data_prob_list = list(zip(log_probability, sim_words))
-        
+        sim_word.append(vocab_word)
+        data_prob_list = list(zip(log_probability, sim_word))
 
     return data_prob_list
 
 
-probability = sorted(get_most_similar('دل', sg_model, vocabulary))
-i = 0;
-for p, w in probability:
-    print(w)
-    i += 1
-    if( i == 5):
-      break
+key_word = input("کلمه مورد نظر را وارد کنید\n")
+window_size = input("تعداد را وارد کنید\n")
+probability = sorted(get_most_similar(key_word, sg_model, vocabulary))
+def print_similar(probability, window_size):
+    i = 0
+    p, w = zip(*probability)
+    for word in w:
+        print(word)
+        i += 1
+        if i == (int)(window_size) + 1:
+            break
 
-test_skipgram(skipgram_train, sg_model)
+print_similar(probability, window_size)
+

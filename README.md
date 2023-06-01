@@ -1,2 +1,3 @@
 # nlp_university_homework
-trying to build a neural network using python libraries
+Building a neural translating machine using Transformeres
+I just build NMT using pytorch 
